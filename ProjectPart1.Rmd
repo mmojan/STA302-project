@@ -1,0 +1,113 @@
+---
+title: "ProjectPart1"
+output: pdf_document
+date: "2023-10-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Cleaning
+
+```{r}
+library(tidyverse)
+
+sales<-read.csv("Video_Games.csv")
+summary(sales)
+
+dim(sales)
+names(sales)
+sales<-sales[is.na(sales$User_Count)==FALSE,]
+sales<-sales[is.na(sales$Critic_Count)==FALSE,]
+sales<-sales[is.na(sales$Developer)==FALSE,]
+sales<-sales[is.na(sales$Year_of_Release)==FALSE,]
+sales<-sales[sales$Year_of_Release!="N/A",]
+
+#sales<-drop_na(sales)
+
+sales$User_Score<-as.numeric(sales$User_Score)
+sales<-sales[,-c(5,6,7,8,9,12,14,15,16)]
+sales<-sales[sales$Year_of_Release>1995,]
+sales<-as.data.frame(sales)
+dim(sales)
+names(sales)
+summary(sales)
+
+write.csv(sales,file="VideoGamesSales.csv")
+
+
+prop.table(table(sales$Platform))*100
+prop.table(table(sales$Year_of_Release))*100 
+prop.table(table(sales$Genre))*100
+summary(sales)
+
+```
+## Fitting the Model
+
+```{r}
+
+VideoGamesSales <- data.frame(read.csv("VideoGamesSales.csv"))
+model <- lm (Global_Sales ~ Critic_Score + User_Score + Platform + Year_of_Release + Genre, data = VideoGamesSales)
+model_1 <- summary(model) 
+
+coef_table <- data.frame(
+  Coefficient = rownames (model_1$coefficients),
+  Estimate = model_1$coefficients [, 1],
+  Std.Error = model_1$coefficients [, 2],
+  T.Value = model_1$coefficients [, 3], 
+  P.Value = model_1$coefficients [, 4]
+)
+# R-squared value
+r_squared <- model_1$r.squared
+# Print the coefficient table and R-squared 
+print(coef_table)
+cat (paste("R-squared: ", round (r_squared, 4), "\n"))
+```
+## Checking Assumptions 
+First we make the plot for the residuals versus fitted values.
+```{r}
+y_hat <- fitted(model)
+e_hat <- resid(model)
+plot(x =y_hat, y = e_hat, main="Residual vs Fitted", xlab="Fitted", ylab="Residuals")
+
+```
+Then we create the residual versus predictor plots for our numerical predictors (Critic_Score, User_Score, Year_of_Release).
+```{r}
+plot(x = VideoGamesSales$Critic_Score, y = e_hat, main="Residual vs Critic_Score", xlab="Critic_Score", ylab="Residual")
+plot(x = VideoGamesSales$User_Score, y = e_hat, main="Residual vs User_Score", xlab="User_Score", ylab="Residual")
+```
+Next we create the residual plots using categorical predictors (Platform, Genre, Year_of_Release).
+
+```{r}
+boxplot(e_hat ~ VideoGamesSales$Platform , main="Residual vs Platform", xlab="Platform", ylab="Residuals")
+boxplot(e_hat ~ VideoGamesSales$Genre , main="Residual vs Genre", xlab="Genre", ylab="Residuals")
+boxplot(e_hat ~ VideoGamesSales$Year_of_Release , main="Residuals vs Year_of_Release", xlab="Year_of_Release", ylab="Residuals")
+```
+Currently, as we have many categories for these variables, these box plots are not very readable. I propose that during the next part of our project, we could limit our dataset to observations that fall into the most popular categories and remove ones whose categories have very few members (for example Action for Genre has a 23.86 percentage so we would keep its observations as a popular category). I also think we could consider year to be a numerical variable in the future.
+
+Lastly, we create the QQ plot.
+```{r}
+qqnorm(e_hat) 
+qqline(e_hat)
+```
+Next, let's check the additional conditions for multiple linear models:
+1. Conditional mean response condition
+2. Conditional mean predictor condition
+Let's make a scatterplot of our response versus fitted values to check condition 1.
+```{r}
+plot(x = y_hat, y = VideoGamesSales$Global_Sales, main="Response vs Fitted", xlab="Fitted", ylab="Global_Sales")
+abline(a = 0, b = 1, lty=2)
+```
+
+Based on this plot, we seem to have roughly random scatter around the diagonal line so the 1st condition holds.
+
+Next, let's check the 2nd condition.
+```{r}
+# a new dataframe with only the numerical values
+new <- subset(VideoGamesSales, select = c(Global_Sales, Critic_Score, User_Score))
+pairs(new)
+```
+I got the following error when trying to include categorical attributes so I only included numerical attributes for the above plot: Error in pairs.default(new) : non-numeric argument to 'pairs'
+
+The 2nd condition seems to be satisfied as well as there are no non-linear patterns present.
