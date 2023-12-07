@@ -1,5 +1,5 @@
 ---
-title: "ProjectPart1"
+title: "ProjectPart3"
 output: pdf_document
 date: "2023-10-17"
 ---
@@ -11,12 +11,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Data Cleaning
 
 ```{r}
-#change wdir to your local dir
-wdir<-"/Users/ro/Downloads/" 
-setwd(wdir)
-sales<-read.csv("Video_Games.csv")
+original_sales<-read.csv("Video_Games.csv")
+# make a copy of the dataset
+sales<-original_sales
 
-#Erase all the rows that do not have information of have N/A
+# remove all rows that have N/A or empty information
 sales<-sales[is.na(sales$User_Count)==FALSE,]
 sales<-sales[is.na(sales$Critic_Count)==FALSE,]
 sales<-sales[is.na(sales$Developer)==FALSE,]
@@ -101,50 +100,116 @@ r_squared <- model_1$r.squared
 print(coef_table)
 cat (paste("R-squared: ", round (r_squared, 4), "\n"))
 ```
+## Checking MLR Conditions
+Let's check the additional conditions for multiple linear models:
+1. Conditional mean response condition
+2. Conditional mean predictor condition
+Let's make a scatterplot of our response versus fitted values to check condition 1.
+```{r}
+y_hat <- fitted(model)
+plot(x = y_hat, y = sales$Global_Sales, main="Response vs Fitted", xlab="Fitted Values", ylab="Global Sales (in millions)")
+abline(a = 0, b = 1, lty=2)
+```
+
+Based on this plot, we don't observe random diagonal scatter or an easily identifiable non-linear trend so the 1st condition does not seem to hold. As a result, the residual plots will not be reliable.
+
+Next, let's check the 2nd condition.
+```{r}
+# a new dataframe with only the numerical predictors
+new <- subset(sales, select = c(Critic_Score, User_Score, Year_of_Release))
+pairs(new)
+```
+The 2nd condition seems to be satisfied as we observe a lack of curves or other non-linear patterns.
+
 ## Checking Assumptions 
 First we make the plot for the residuals versus fitted values.
 ```{r}
-y_hat <- fitted(model)
 e_hat <- resid(model)
-plot(x =y_hat, y = e_hat, main="Residual vs Fitted", xlab="Fitted", ylab="Residuals")
-
+plot(x =y_hat, y = e_hat, main="Residual vs Fitted", xlab="Fitted Values", ylab="Residuals")
 ```
 Then we create the residual versus predictor plots for our numerical predictors (Critic_Score, User_Score, Year_of_Release).
 ```{r}
-plot(x = VideoGamesSales$Critic_Score, y = e_hat, main="Residual vs Critic_Score", xlab="Critic_Score", ylab="Residual")
-plot(x = VideoGamesSales$User_Score, y = e_hat, main="Residual vs User_Score", xlab="User_Score", ylab="Residual")
+plot(x = sales$Critic_Score, y = e_hat, main="Residual vs Critic_Score", xlab="Critic Score", ylab="Residual")
+plot(x = sales$User_Score, y = e_hat, main="Residual vs User_Score", xlab="User Score", ylab="Residual")
+plot(x = sales$Year_of_Release, y = e_hat, main="Residual vs Year_of_Release", xlab="Year of Release", ylab="Residual")
 ```
-Next we create the residual plots using categorical predictors (Platform, Genre, Year_of_Release).
+Next we create the residual plots using categorical predictors (Platform, Genre).
 
 ```{r}
-boxplot(e_hat ~ VideoGamesSales$Platform , main="Residual vs Platform", xlab="Platform", ylab="Residuals")
-boxplot(e_hat ~ VideoGamesSales$Genre , main="Residual vs Genre", xlab="Genre", ylab="Residuals")
-boxplot(e_hat ~ VideoGamesSales$Year_of_Release , main="Residuals vs Year_of_Release", xlab="Year_of_Release", ylab="Residuals")
+boxplot(e_hat ~ sales$Platform , main="Residual vs Platform", xlab="Platform", ylab="Residuals")
+boxplot(e_hat ~ sales$Genre , main="Residual vs Genre", xlab="Genre", ylab="Residuals")
 ```
-Currently, as we have many categories for these variables, these box plots are not very readable. I propose that during the next part of our project, we could limit our dataset to observations that fall into the most popular categories and remove ones whose categories have very few members (for example Action for Genre has a 23.86 percentage so we would keep its observations as a popular category). I also think we could consider year to be a numerical variable in the future.
 
 Lastly, we create the QQ plot.
 ```{r}
 qqnorm(e_hat) 
 qqline(e_hat)
 ```
-Next, let's check the additional conditions for multiple linear models:
-1. Conditional mean response condition
-2. Conditional mean predictor condition
-Let's make a scatterplot of our response versus fitted values to check condition 1.
+We observe a violation of the normality assumption based on the deviation and curving from the diagonal line that occurs in the QQ plot. 
+We also have some evidence of a violation of the constant variance assumption due to the increase of the spread shown in the residual vs fitted, residual vs user_score, and residual vs critic_score plots.
+We also have evidence of a violation of the linearity assumption since we observe some systemic patterns in the residual vs fitted, residual vs user_score, and residual vs critic_score plots.
+As we don't observe any large clusters if points or patterns across time we don't have a violation of the uncorrelated errors assumption.
+
+## Transformations
+
+We apply Box-Cox transformation to the response to mitigate the observed violation of the linearity assumption.
 ```{r}
-plot(x = y_hat, y = VideoGamesSales$Global_Sales, main="Response vs Fitted", xlab="Fitted", ylab="Global_Sales")
+# Transformation on Y
+library(car)
+boxCox(model)
+```
+The 95% Cl on MLE is very close to 0 so ln transformation is reasonable.
+Based on the transformation on y, we fit a new model:
+```{r}
+model_ln <- lm (log(Global_Sales) ~ Critic_Score + User_Score + Platform2 + Year_of_Release + Genre2, data = sales)
+summary(model_ln)
+```
+After fitting this new model, we once again check the MLR additional conditions and check for assumption violations.
+
+```{r}
+# condition 1
+y_hat <- fitted(model_ln)
+plot(x = y_hat, y = sales$Global_Sales, main="Response vs Fitted", xlab="Fitted Values", ylab="Global Sales (in millions)")
 abline(a = 0, b = 1, lty=2)
 ```
-
-Based on this plot, we seem to have roughly random scatter around the diagonal line so the 1st condition holds.
-
-Next, let's check the 2nd condition.
+Based on this plot, we don't observe random diagonal scatter or an easily identifiable non-linear trend so the 1st condition does not seem to hold. As a result, the residual plots will not be reliable.
+Condition 2 still holds as previously shown.
+Now we check the assumptions one again.
 ```{r}
-# a new dataframe with only the numerical values
-new <- subset(VideoGamesSales, select = c(Global_Sales, Critic_Score, User_Score))
-pairs(new)
+# residuals versus fitted values
+e_hat <- resid(model_ln)
+plot(x =y_hat, y = e_hat, main="Residual vs Fitted", xlab="Fitted Values", ylab="Residuals")
 ```
-I got the following error when trying to include categorical attributes so I only included numerical attributes for the above plot: Error in pairs.default(new) : non-numeric argument to 'pairs'
 
-The 2nd condition seems to be satisfied as well as there are no non-linear patterns present.
+```{r}
+# residual versus predictor plots for numerical variables
+plot(x = sales$Critic_Score, y = e_hat, main="Residual vs Critic_Score", xlab="Critic Score", ylab="Residual")
+plot(x = sales$User_Score, y = e_hat, main="Residual vs User_Score", xlab="User Score", ylab="Residual")
+plot(x = sales$Year_of_Release, y = e_hat, main="Residual vs Year_of_Release", xlab="Year of Release", ylab="Residual")
+```
+
+```{r}
+# residual plots for categorical predictors
+boxplot(e_hat ~ sales$Platform , main="Residual vs Platform", xlab="Platform", ylab="Residuals")
+boxplot(e_hat ~ sales$Genre , main="Residual vs Genre", xlab="Genre", ylab="Residuals")
+```
+
+```{r}
+# QQ plot
+qqnorm(e_hat) 
+qqline(e_hat)
+```
+
+Based on the new plots we don't observe any assumption violations.
+Next we perform ANOVA test of overall significance to identify the existence of a linear relationship (null hypothesis: all slopes are zero).
+```{r}
+summary(model_ln)
+```
+From the summary table we can see that the p-value is 2.2e-16 which is less than $\alpha$ = 0.05. So we reject the null and conclude a statistically significant linear relationship exists for at least one predictor.
+
+Next, we perform hypothesis tests for individual coefficients in our model (with the null hypothesis being that the coefficient is 0).
+```{r}
+summary(model_ln)
+```
+
+Based on the Pr(>|t|) column in the summary table we reject the null and claim a significant linear relationship exists for all the coefficients ($Pr(>|t|)$ is less than $\alpha$ = 0.05 for all coefficients). As all coefficients are significant, we can't make a more reduced model to perform a partial F test and we choose the current model as our final one.
